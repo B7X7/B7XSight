@@ -23,16 +23,18 @@ B7XSight is a Python-based Web Security Scanner designed to identify common web 
 
 This project is actively being developed as part of my penetration testing learning journey.
 
-## Roadmap
+## Planned Features
 
-- [x] Project Initialization
-- [ ] Target Validation
-- [ ] Connectivity Checks
-- [ ] Security Header Analysis
-- [ ] Sensitive File Detection
-- [ ] Risk Scoring Engine
-- [ ] HTML Reports
+- Security headers scanner
+- Cookie security scanner
+- Sensitive path detection
+- HTML/Markdown reports
+- Risk scoring
 
-## Author
+## Usage
 
-Bandr Alghamdi
+python3 main.py
+
+B7XSight> set target example.com
+B7XSight> set mode connection
+B7XSight> run

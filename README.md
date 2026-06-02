@@ -36,5 +36,7 @@ This project is actively being developed as part of my penetration testing learn
 python3 main.py
 
 B7XSight> set target example.com
+
 B7XSight> set mode connection
+
 B7XSight> run

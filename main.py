@@ -4,6 +4,7 @@ from core.banner import print_banner, print_help
 from core.completer import completer
 from utils.url import normalize_url, is_valid_url
 from scanners.connection import check_connection
+from scanners.headers import check_security_headers
 
 
 
@@ -137,7 +138,7 @@ def main():
                     check_connection(target)
 
                 elif mode == "headers":
-                    print("Headers scanner is not added yet")
+                    check_security_headers(target)
 
                 elif mode == "cookies":
                     print("Cookies scanner is not added yet")

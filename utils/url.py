@@ -10,6 +10,6 @@ def is_valid_url(url):
         return False
     if " " in url:
         return False
-    if "." not in url:  # ✅ أضف هذا
+    if "." not in url:
         return False
     return True

@@ -18,7 +18,7 @@ Use `python3` instead where your system names the executable that way. On Window
 ## Use the console
 
 ```text
-set target https://authorized.example/
+set target https://example/
 set mode headers
 run
 show target

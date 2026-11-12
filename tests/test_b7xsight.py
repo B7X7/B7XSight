@@ -1,4 +1,7 @@
 import io
+import json
+from pathlib import Path
+import tempfile
 import socket
 import subprocess
 import sys
@@ -11,7 +14,8 @@ from unittest.mock import patch
 import main
 from core.completer import configure_completion, suggestions
 from scanners.connection import check_connection
-from scanners.cookies import check_cookie_security
+from scanners.cookies import check_cookie_security, cookie_issues
+from core.report import save_report
 from scanners.headers import check_security_headers, header_status
 from scanners.paths import check_sensitive_path
 from scanners.ports import check_ports
@@ -59,6 +63,16 @@ class TestTargets(unittest.TestCase):
 
 
 class TestHeaderValues(unittest.TestCase):
+    def test_referrer_fallback_uses_last_recognized_policy(self):
+        self.assertEqual(header_status("Referrer-Policy", ["unsafe-url, no-referrer"], "https"), "present")
+        self.assertIn("full referrers", header_status("Referrer-Policy", ["no-referrer", "unsafe-url"], "https"))
+        self.assertEqual(header_status("Referrer-Policy", ["invalid"], "https"), "unrecognized policy")
+
+    def test_cookie_prefix_requirements(self):
+        self.assertEqual(cookie_issues("__Host-session", {"secure": "", "path": "/"}, "https"), [])
+        self.assertEqual(len(cookie_issues("__Host-Http-session", {"domain": "example.test"}, "http")), 3)
+        self.assertIn("Partitioned", cookie_issues("session", {"partitioned": ""}, "https")[0])
+
     def test_hsts(self):
         for values, scheme, expected in (
             (["max-age=10"], "http", "applies to HTTPS only"),
@@ -125,6 +139,43 @@ class TestHttpModes(unittest.TestCase):
         self.assertIn("302", output_of(check_connection, self.origin + "/redirect"))
         self.assertIn("404", output_of(check_connection, self.origin + "/missing"))
         self.assertEqual(self.server.calls, [("GET", "/redirect"), ("GET", "/missing")])
+
+    def test_direct_cli_writes_redacted_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "report.json"
+            destination.write_text("old report", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, "main.py", "--target", self.origin + "/?key=private",
+                 "--mode", "connection", "--output", str(destination)],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            report = json.loads(destination.read_text(encoding="utf-8"))
+            self.assertTrue(report["completed"])
+            self.assertEqual(report["mode"], "connection")
+            self.assertEqual(report["target"], self.origin + "/?[redacted]")
+            self.assertNotIn("private", json.dumps(report) + result.stdout)
+            self.assertEqual(self.server.calls, [("GET", "/?key=private")])
+            self.assertEqual(len(list(Path(directory).iterdir())), 1)
+
+    def test_direct_cli_returns_failure_for_incomplete_analysis(self):
+        result = subprocess.run(
+            [sys.executable, "main.py", "--target", self.origin, "--mode", "robots"],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("HTTP 404", result.stdout)
+
+    def test_sitemap_counts_invalid_and_duplicate_locations(self):
+        self.server.routes["/sitemap.xml"] = (200, (), b"""
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              <url><loc>https://example.test/</loc></url>
+              <url><loc>https://example.test/</loc></url>
+              <url><loc>/relative</loc></url>
+              <url><loc>ftp://example.test/</loc></url>
+            </urlset>""")
+        result = output_of(check_robots_and_sitemap, self.origin)
+        self.assertIn("Invalid locations: 2", result)
+        self.assertIn("Duplicate locations: 1", result)
 
     def test_headers_preserve_duplicates_and_do_not_echo_values(self):
         self.server.routes["/"] = (200, (
@@ -249,6 +300,36 @@ class TestHttpModes(unittest.TestCase):
 
 
 class TestCliAndFailures(unittest.TestCase):
+    def test_direct_cli_requires_target_and_mode(self):
+        result = subprocess.run(
+            [sys.executable, "main.py", "--mode", "headers"],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_report_replace_failure_preserves_previous_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "report.json"
+            destination.write_text("previous report", encoding="utf-8")
+            with patch("core.report.os.replace", side_effect=PermissionError):
+                with self.assertRaises(PermissionError):
+                    save_report(destination, {"completed": True})
+            self.assertEqual(destination.read_text(encoding="utf-8"), "previous report")
+            self.assertEqual(len(list(Path(directory).iterdir())), 1)
+
+    def test_direct_cli_network_failure_is_saved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "report.json"
+            with patch("utils.http.HTTPConnection.request", side_effect=TimeoutError):
+                with redirect_stdout(io.StringIO()):
+                    status = main.cli([
+                        "--target", "http://example.test", "--mode", "connection",
+                        "--output", str(destination),
+                    ])
+            self.assertEqual(status, 1)
+            self.assertFalse(json.loads(destination.read_text())["completed"])
+
     def test_help_and_completion_share_modes(self):
         result = output_of(main.print_help, main.MODES)
         for mode in main.MODES:

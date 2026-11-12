@@ -38,6 +38,33 @@ The example assumes a local web server on port 8000. Bare hostnames default to H
 
 HTTP checks verify TLS certificates and hostnames. Requests are direct and do not follow redirects. Connection and response operations use a five-second socket timeout. TCP port checks use a two-second socket timeout per address attempt. The console redacts query strings in its output. Supply targets without credentials or other secrets.
 
+## Run a check directly
+
+```sh
+python main.py --target http://localhost:8000 --mode headers
+python main.py --target http://localhost:8000 --mode cookies --output report.json
+python main.py --help
+```
+
+The same six modes work in the console and with command-line arguments. Reports
+contain the selected mode, redacted target, UTC timestamp, completion status, and
+the output lines. Cookie values are omitted. An existing report file is replaced
+only after the new report has been written successfully.
+
+Exit status is 0 for a completed check, 1 for a failed connection, incomplete
+document analysis, or report write failure, 2 for invalid arguments, and 130
+for an interrupted direct check. A completed check can still contain findings.
+HTTP error statuses are reported as results in connection, header, cookie, and
+path checks. The document analyzer requires HTTP 200 to parse each document.
+
+The connection check measures time to receive response headers. Cookie analysis
+also checks cookie prefixes and the Secure requirement for Partitioned cookies.
+Referrer-Policy checks recognize fallback policies and flag unsafe-url.
+Sitemap analysis counts invalid absolute URLs and duplicate locations.
+
+Cookie attribute checks follow the [Set-Cookie reference](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
+Referrer policy handling follows the [Referrer-Policy reference](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy).
+
 ## Tests
 
 ```sh

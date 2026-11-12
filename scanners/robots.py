@@ -1,7 +1,10 @@
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
-from utils.http import HTTP_ERRORS, read_document, request
+from urllib.parse import urlsplit
+
+from utils.http import HTTP_ERRORS, error_message, read_document, request
+from utils.url import is_valid_url
 
 
 DOCUMENTS = {"/robots.txt": 512_000, "/sitemap.xml": 1_048_576}
@@ -31,28 +34,46 @@ def analyze_sitemap(body):
     }
     if root.tag not in entries:
         print("  Unrecognized sitemap root or namespace.")
-        return
+        return False
     tag, label = entries[root.tag]
     items = root.findall(SITEMAP_NS + tag)
-    with_location = sum(
-        bool((item.findtext(SITEMAP_NS + "loc") or "").strip()) for item in items
-    )
+    locations = [
+        (item.findtext(SITEMAP_NS + "loc") or "").strip() for item in items
+    ]
+    with_location = sum(bool(location) for location in locations)
     print(f"  {label}: {len(items)} ({len(items) - with_location} without a location).")
+    valid_locations = []
+    invalid = 0
+    for location in filter(None, locations):
+        if not is_valid_url(location) or urlsplit(location).scheme not in ("http", "https"):
+            invalid += 1
+        else:
+            valid_locations.append(location)
+    print(f"  Invalid locations: {invalid}")
+    print(f"  Duplicate locations: {len(valid_locations) - len(set(valid_locations))}")
+    return True
 
 
 def check_robots_and_sitemap(target):
+    completed = True
     for path, analyze in (("/robots.txt", analyze_robots), ("/sitemap.xml", analyze_sitemap)):
         try:
             with request(target, path=path) as response:
                 print(f"{path} (HTTP {response.status})")
                 if response.status != 200:
                     print("  Analysis requires HTTP 200.")
+                    completed = False
                     continue
                 body = read_document(response, DOCUMENTS[path])
-            analyze(body)
+            if analyze(body) is False:
+                completed = False
         except HTTP_ERRORS as error:
-            print(f"{path}: request failed ({type(error).__name__}).")
+            print(f"{path}: {error_message(error)}.")
+            completed = False
         except (UnicodeError, ElementTree.ParseError, DefusedXmlException, LookupError):
             print(f"{path}: malformed or unsupported document.")
+            completed = False
         except ValueError as error:
             print(f"{path}: {error}.")
+            completed = False
+    return completed

@@ -1,24 +1,20 @@
-from urllib.parse import urlsplit
-
 from utils.http import HTTP_ERRORS, request
 
 
 def check_sensitive_path(target):
-    if urlsplit(target).path in ("", "/"):
-        print("Set the target to the exact authorized path you want to check.")
-        return
-
     try:
         with request(target, method="HEAD") as response:
             status = response.status
             if 200 <= status < 300:
-                result = "reachable by HEAD; verify whether this is the expected resource"
+                result = "server returned success for HEAD"
             elif status in (401, 403):
-                result = "access restricted for this request"
+                result = "access restricted"
             elif status in (404, 410):
-                result = "path reported absent"
-            elif 300 <= status < 400:
-                result = "redirect; result inconclusive"
+                result = "server reported the path missing"
+            elif status in (405, 501):
+                result = "server did not accept HEAD"
+            elif status in (301, 302, 303, 307, 308):
+                result = "redirect"
             else:
                 result = "result inconclusive"
             print(f"Path check (HTTP {status}): {result}.")

@@ -1,7 +1,6 @@
 def print_banner():
     print("B7XSight | Web Security Scanner")
     print("Author: Bandr Alghamdi")
-    print("Use only on systems you are authorized to assess.")
     print("Type 'help' for commands and scan modes.")
 
 

@@ -1,104 +1,34 @@
-import readline
+MAIN_COMMANDS = ("set", "show", "run", "clear", "help", "exit")
+OPTIONS = ("target", "mode")
 
 
-MAIN_COMMANDS = [
-    "set",
-    "show",
-    "run",
-    "clear",
-    "help",
-    "exit"
-]
+def suggestions(line, prefix, modes):
+    preceding = line.split() if not prefix else line[: -len(prefix)].split()
+    preceding = [word.lower() for word in preceding]
+    if not preceding:
+        choices = MAIN_COMMANDS
+    elif preceding in (["set"], ["show"]):
+        choices = OPTIONS
+    elif preceding == ["set", "mode"]:
+        choices = modes
+    else:
+        return []
+    return [choice + " " for choice in choices if choice.startswith(prefix.lower())]
 
 
-SET_OPTIONS = [
-    "target",
-    "mode"
-]
+def configure_completion(modes):
+    try:
+        import readline
+    except ImportError:
+        return
 
+    def complete(text, state):
+        line = readline.get_line_buffer()[:readline.get_endidx()]
+        matches = suggestions(line, text, modes)
+        return matches[state] if state < len(matches) else None
 
-SHOW_OPTIONS = [
-    "target",
-    "mode"
-]
-
-
-MODE_OPTIONS = [
-    "connection",
-    "headers",
-    "cookies",
-    "paths",
-    "ports"
-]
-
-
-def completer(text, state):
-    line = readline.get_line_buffer()
-    parts = line.split()
-
-    matches = []
-
-    # First command completion
-    # Example: r<Tab> -> run
-    if len(parts) == 0:
-        matches = MAIN_COMMANDS
-
-    elif len(parts) == 1 and not line.endswith(" "):
-        matches = [
-            command for command in MAIN_COMMANDS
-            if command.startswith(text.lower())
-        ]
-
-    # After first command
-    # Example: set <Tab> -> target, mode
-    elif len(parts) == 1 and line.endswith(" "):
-        first = parts[0].lower()
-
-        if first == "set":
-            matches = SET_OPTIONS
-
-        elif first == "show":
-            matches = SHOW_OPTIONS
-
-    # Completing second word
-    # Example: set t<Tab> -> target
-    elif len(parts) == 2 and not line.endswith(" "):
-        first = parts[0].lower()
-
-        if first == "set":
-            matches = [
-                option for option in SET_OPTIONS
-                if option.startswith(text.lower())
-            ]
-
-        elif first == "show":
-            matches = [
-                option for option in SHOW_OPTIONS
-                if option.startswith(text.lower())
-            ]
-
-    # After "set mode "
-    # Example: set mode <Tab> -> connection, headers, cookies, paths, ports
-    elif len(parts) == 2 and line.endswith(" "):
-        first = parts[0].lower()
-        second = parts[1].lower()
-
-        if first == "set" and second == "mode":
-            matches = MODE_OPTIONS
-
-    # Completing mode value
-    # Example: set mode h<Tab> -> headers
-    elif len(parts) == 3:
-        first = parts[0].lower()
-        second = parts[1].lower()
-
-        if first == "set" and second == "mode":
-            matches = [
-                mode for mode in MODE_OPTIONS
-                if mode.startswith(text.lower())
-            ]
-
-    if state < len(matches):
-        return matches[state] + " "
-
-    return None
+    readline.set_completer(complete)
+    if getattr(readline, "backend", "") == "editline" or "libedit" in (readline.__doc__ or ""):
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")

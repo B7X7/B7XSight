@@ -1,12 +1,9 @@
-import requests
+from utils.http import HTTP_ERRORS, request
 
 
 def check_connection(target):
     try:
-        response = requests.get(target, timeout=10)
-        print("Connection successful")
-        print("Status code:", response.status_code)
-
-    except requests.RequestException as error:
-        print("Connection failed")
-        print("Error:", error)
+        with request(target) as response:
+            print(f"HTTP response received (status {response.status}).")
+    except HTTP_ERRORS as error:
+        print(f"Connection failed ({type(error).__name__}).")

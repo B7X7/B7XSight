@@ -1,4 +1,4 @@
-from utils.http import HTTP_ERRORS, request
+from utils.http import HTTP_ERRORS, error_message, request
 
 
 def check_sensitive_path(target):
@@ -19,4 +19,6 @@ def check_sensitive_path(target):
                 result = "result inconclusive"
             print(f"Path check (HTTP {status}): {result}.")
     except HTTP_ERRORS as error:
-        print(f"Path check failed ({type(error).__name__}).")
+        print(f"Path check failed: {error_message(error)}.")
+        return False
+    return True

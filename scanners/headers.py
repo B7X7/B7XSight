@@ -1,7 +1,7 @@
 import re
 from urllib.parse import urlsplit
 
-from utils.http import HTTP_ERRORS, request
+from utils.http import HTTP_ERRORS, error_message, request
 from utils.url import normalize_url
 
 
@@ -13,6 +13,11 @@ SECURITY_HEADERS = (
     "Referrer-Policy",
     "Permissions-Policy",
 )
+REFERRER_POLICIES = {
+    "no-referrer", "no-referrer-when-downgrade", "origin",
+    "origin-when-cross-origin", "same-origin", "strict-origin",
+    "strict-origin-when-cross-origin", "unsafe-url",
+}
 MAX_AGE = re.compile(r'max-age\s*=\s*(?:"([0-9]+)"|([0-9]+))', re.IGNORECASE)
 
 
@@ -41,6 +46,15 @@ def header_status(header, values, scheme):
             return "unrecognized value"
         if len({value.strip().upper() for value in values}) > 1:
             return "conflicting values"
+    elif header == "Referrer-Policy":
+        policies = [
+            token.strip() for value in values for token in value.split(",")
+            if token.strip() in REFERRER_POLICIES
+        ]
+        if not policies:
+            return "unrecognized policy"
+        if policies[-1] == "unsafe-url":
+            return "unsafe-url sends full referrers across origins"
     return "present"
 
 
@@ -54,5 +68,10 @@ def check_security_headers(target):
                 print(f"{header}: {header_status(header, values, urlsplit(target).scheme)}")
             if response.headers.get("X-XSS-Protection") is not None:
                 print("X-XSS-Protection: legacy header")
+            if response.headers.get("Content-Security-Policy-Report-Only"):
+                print("Content-Security-Policy-Report-Only: monitoring policy")
+            print("Header presence alone does not confirm effective protection.")
     except HTTP_ERRORS as error:
-        print(f"Header check failed ({type(error).__name__}).")
+        print(f"Header check failed: {error_message(error)}.")
+        return False
+    return True

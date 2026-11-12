@@ -1,10 +1,14 @@
 import socket
 from urllib.parse import urlsplit
 
+from utils.http import error_message
+from utils.url import normalize_url
+
 
 def check_ports(target):
-    url = urlsplit(target)
+    url = urlsplit(normalize_url(target))
     ports = (url.port,) if url.port is not None else (80, 443)
+    completed = True
     for port in ports:
         try:
             with socket.create_connection((url.hostname, port), timeout=2):
@@ -13,6 +17,9 @@ def check_ports(target):
             result = "connection refused"
         except TimeoutError:
             result = "timed out"
+            completed = False
         except OSError as error:
-            result = f"connection failed ({type(error).__name__})"
+            result = error_message(error)
+            completed = False
         print(f"TCP {port}: {result}")
+    return completed

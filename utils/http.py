@@ -3,6 +3,8 @@
 from contextlib import contextmanager
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from time import monotonic
+import socket
+import ssl
 from urllib.parse import urlsplit
 
 from utils.url import normalize_url
@@ -10,6 +12,22 @@ from utils.url import normalize_url
 
 TIMEOUT = 5
 HTTP_ERRORS = (OSError, HTTPException)
+
+
+def error_message(error):
+    if isinstance(error, ssl.SSLCertVerificationError):
+        return "TLS certificate verification failed"
+    if isinstance(error, ssl.SSLError):
+        return "TLS handshake failed"
+    if isinstance(error, socket.gaierror):
+        return "hostname could not be resolved"
+    if isinstance(error, TimeoutError):
+        return "connection or response timed out"
+    if isinstance(error, ConnectionRefusedError):
+        return "server refused the connection"
+    if isinstance(error, HTTPException):
+        return "invalid or incomplete HTTP response"
+    return "network connection failed"
 
 
 @contextmanager
@@ -23,7 +41,11 @@ def request(target, *, method="GET", path=None):
         connection.request(
             method,
             resource if path is None else path,
-            headers={"User-Agent": "B7XSight", "Connection": "close"},
+            headers={
+                "User-Agent": "B7XSight",
+                "Connection": "close",
+                "Accept-Encoding": "identity",
+            },
         )
         with connection.getresponse() as response:
             yield response

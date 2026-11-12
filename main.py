@@ -1,8 +1,14 @@
 import os
 import sys
+import argparse
+from contextlib import redirect_stdout
+from datetime import datetime, timezone
+import io
+from pathlib import Path
 
 from core.banner import print_banner, print_help
 from core.completer import configure_completion
+from core.report import save_report
 from scanners.connection import check_connection
 from scanners.cookies import check_cookie_security
 from scanners.headers import check_security_headers
@@ -90,5 +96,55 @@ def main():
     print("Exiting B7XSight.")
 
 
+def cli(argv=None):
+    parser = argparse.ArgumentParser(
+        description="B7XSight web server checks by Bandr Alghamdi.",
+        epilog="Run without arguments to open the interactive console.",
+    )
+    parser.add_argument("--target", help="HTTP(S) URL or hostname")
+    parser.add_argument("--mode", choices=MODES, help="check to run")
+    parser.add_argument("--output", type=Path, help="write a JSON report")
+    args = parser.parse_args(argv)
+    if args.target is None and args.mode is None and args.output is None:
+        main()
+        return 0
+    if args.target is None or args.mode is None:
+        parser.error("--target and --mode are required together")
+    try:
+        target = normalize_url(args.target)
+    except ValueError as error:
+        parser.error(str(error))
+    if args.output is not None:
+        if not args.output.parent.is_dir() or args.output.is_dir():
+            parser.error("--output must name a file in an existing directory")
+
+    print(f"Running {args.mode} on {display_url(target)}")
+    output = io.StringIO()
+    try:
+        with redirect_stdout(output):
+            completed = MODES[args.mode][0](target)
+    except KeyboardInterrupt:
+        print(output.getvalue(), end="")
+        print("Check cancelled.", file=sys.stderr)
+        return 130
+    print(output.getvalue(), end="")
+    if args.output is not None:
+        report = {
+            "schema_version": 1,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "target": display_url(target),
+            "mode": args.mode,
+            "completed": completed,
+            "output": output.getvalue().splitlines(),
+        }
+        try:
+            save_report(args.output, report)
+        except OSError:
+            print("Could not save the report. Check the output path and write access.", file=sys.stderr)
+            return 1
+        print(f"Report saved to {ascii(str(args.output))}")
+    return 0 if completed else 1
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(cli())

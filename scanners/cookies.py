@@ -1,6 +1,8 @@
 import re
+from urllib.parse import urlsplit
 
-from utils.http import HTTP_ERRORS, request
+from utils.http import HTTP_ERRORS, error_message, request
+from utils.url import normalize_url
 
 
 COOKIE_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
@@ -20,6 +22,7 @@ def cookie_attributes(field):
 
 
 def check_cookie_security(target):
+    target = normalize_url(target)
     try:
         with request(target) as response:
             print(f"Cookie security (HTTP {response.status})")
@@ -42,5 +45,24 @@ def check_cookie_security(target):
                 else:
                     policy = "SameSite missing or unrecognized"
                 print(f"Cookie #{number} ({name}): {secure}, {http_only}, {policy}")
+                for issue in cookie_issues(name, flags, urlsplit(target).scheme):
+                    print(f"  {issue}")
     except HTTP_ERRORS as error:
-        print(f"Cookie check failed ({type(error).__name__}).")
+        print(f"Cookie check failed: {error_message(error)}.")
+        return False
+    return True
+
+
+def cookie_issues(name, flags, scheme):
+    issues = []
+    if name.startswith(("__Secure-", "__Host-", "__Http-")):
+        if "secure" not in flags or scheme != "https":
+            issues.append("Cookie prefix requires Secure and HTTPS.")
+    if name.startswith("__Host-"):
+        if flags.get("path") != "/" or "domain" in flags:
+            issues.append("Host-prefixed cookies require Path=/ and no Domain attribute.")
+    if name.startswith(("__Http-", "__Host-Http-")) and "httponly" not in flags:
+        issues.append("HTTP-prefixed cookies require HttpOnly.")
+    if "partitioned" in flags and "secure" not in flags:
+        issues.append("Partitioned cookies require Secure.")
+    return issues

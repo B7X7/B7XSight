@@ -158,22 +158,40 @@ class TestHttpModes(unittest.TestCase):
         self.assertIn("No Set-Cookie fields", output_of(check_cookie_security, self.origin))
 
     def test_paths_only_check_the_supplied_path_with_head(self):
+        self.server.routes["/"] = (200, (), b"home")
         self.server.routes["/configured"] = (200, (), b"hidden-body")
         self.server.routes["/restricted"] = (403, (), b"")
         self.server.routes["/redirect"] = (302, (("Location", "/configured"),), b"")
+        self.server.routes["/no-head"] = (405, (), b"")
+        self.server.routes["/not-modified"] = (304, (), b"")
         for path, result in (
-            ("/", "exact authorized path"),
-            ("/configured", "verify whether"),
+            ("", "server returned success for HEAD"),
+            ("/configured", "server returned success for HEAD"),
             ("/restricted", "access restricted"),
-            ("/missing", "reported absent"),
-            ("/redirect", "result inconclusive"),
+            ("/missing", "server reported the path missing"),
+            ("/redirect", "HTTP 302): redirect"),
+            ("/no-head", "server did not accept HEAD"),
+            ("/not-modified", "result inconclusive"),
         ):
             with self.subTest(path=path):
                 self.assertIn(result, output_of(check_sensitive_path, self.origin + path))
         self.assertEqual(self.server.calls, [
-            ("HEAD", "/configured"), ("HEAD", "/restricted"),
-            ("HEAD", "/missing"), ("HEAD", "/redirect"),
+            ("HEAD", "/"), ("HEAD", "/configured"), ("HEAD", "/restricted"),
+            ("HEAD", "/missing"), ("HEAD", "/redirect"), ("HEAD", "/no-head"),
+            ("HEAD", "/not-modified"),
         ])
+
+    def test_cli_paths_runs_on_bare_target(self):
+        self.server.routes["/"] = (200, (), b"home")
+        result = subprocess.run(
+            [sys.executable, "main.py"],
+            input=f"set target {self.origin}\nset mode paths\nshow target\nrun\nexit\n",
+            capture_output=True, text=True, timeout=10, check=True,
+        )
+        self.assertIn(f"Running paths on {self.origin}/", result.stdout)
+        self.assertIn("Path check (HTTP 200)", result.stdout)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(self.server.calls, [("HEAD", "/")])
 
     def test_robots_and_sitemap_are_origin_root_only(self):
         self.server.routes["/robots.txt"] = (

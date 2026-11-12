@@ -13,12 +13,12 @@ from utils.url import display_url, normalize_url
 
 
 MODES = {
-    "connection": (check_connection, "Check whether the target responds over HTTP"),
-    "headers": (check_security_headers, "Inspect security response headers"),
-    "cookies": (check_cookie_security, "Inspect Set-Cookie security attributes"),
-    "paths": (check_sensitive_path, "Check the exact authorized path using HEAD"),
+    "connection": (check_connection, "Show the HTTP status"),
+    "headers": (check_security_headers, "Check security headers"),
+    "cookies": (check_cookie_security, "Check cookie flags"),
+    "paths": (check_sensitive_path, "Send a HEAD request to the target URL"),
     "robots": (check_robots_and_sitemap, "Summarize robots.txt and sitemap.xml"),
-    "ports": (check_ports, "Check the specified TCP port or ports 80 and 443"),
+    "ports": (check_ports, "Check the target port or TCP ports 80 and 443"),
 }
 
 
@@ -69,6 +69,7 @@ def main():
             if not target or not mode:
                 print("Set both target and mode before running a check.")
                 continue
+            print(f"Running {mode} on {display_url(target)}")
             try:
                 MODES[mode][0](target)
             except KeyboardInterrupt:
